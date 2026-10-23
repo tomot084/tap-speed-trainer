@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#0b1325"><title>交互タップ測定</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#0b1325;color:#f1f5ff;font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{max-width:640px;margin:auto;padding:18px}h1{font-size:24px;margin:10px 0}p{color:#aebbd3;font-size:14px;line-height:1.5}.controls{display:flex;gap:9px;margin:15px 0}button{background:#273a5e;color:white;border:1px solid #56709e;border-radius:12px;padding:13px 16px;font-size:16px;font-weight:700}button.selected,button.primary{background:#2589e8;border-color:#2589e8}button:disabled{opacity:.45}.controls button{flex:1}.status{text-align:center;font-size:18px;margin:12px}.status strong{font-size:30px}#pad{height:40vh;min-height:230px;max-height:430px;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:20px;border:2px solid #4276af;background:#142b4b;touch-action:none;overscroll-behavior:contain;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-size:27px;font-weight:800}#pad.active{background:#124b4e;border-color:#34d3ad}#pad.finished{background:#26304b}#results{margin-top:20px;background:#17243b;border-radius:15px;padding:15px}#results[hidden]{display:none}.stats{display:flex;justify-content:space-around;gap:10px;text-align:center}.stats b{font-size:24px}.stats small{display:block;color:#afbdd2}.bars{display:flex;align-items:end;gap:5px;height:120px;border-bottom:1px solid #667;padding-top:10px}.bar{flex:1;min-width:0;background:#39b5ed;border-radius:4px 4px 0 0;position:relative}.bar span{position:absolute;top:-21px;left:0;right:0;text-align:center;font-size:11px}.ticks{display:flex;gap:5px}.ticks span{flex:1;text-align:center;font-size:11px;color:#aebbd3}.note{font-size:12px}
+</style></head><body><main>
+<h1>⚡ 交互タップ測定</h1><p>左手130回／10秒を目指そう。人差し指と中指の接触開始を別々にカウントします。</p>
+<div class="controls" id="durations"><button data-s="3">3秒</button><button data-s="5">5秒</button><button data-s="10" class="selected">10秒</button></div>
+<div class="controls"><button class="primary" id="start">測定開始（3秒後）</button><button id="reset">リセット</button></div>
+<div class="status" id="status">待機中</div>
+<div id="pad">ここを連打！<br>開始ボタンを押してね</div>
+<section id="results" hidden><h2>測定結果</h2><div class="stats"><div><b id="total">0</b><small>合計タップ</small></div><div><b id="avg">0</b><small>平均CPS</small></div><div><b id="peak">0</b><small>最高1秒CPS</small></div></div><h3>1秒ごとの回数</h3><div class="bars" id="bars"></div><div class="ticks" id="ticks"></div></section>
+<p class="note">終了後に連打しても再スタートしません。新しい測定には「測定開始」を押してください。ブラウザが同時接触を処理できない場合、実際の接触数と差が出る可能性があります。</p>
+</main><script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),pad=$('pad'),start=$('start'),status=$('status');let seconds=10,mode='idle',startAt=0,events=[],timer=null,active=new Set();
+const clock=()=>performance.now();
+function stopTimer(){if(timer!==null){clearInterval(timer);timer=null}}
+function setMode(m){mode=m;pad.className=m==='running'?'active':m==='done'?'finished':'';start.disabled=m==='countdown'||m==='running';}
+function finish(){if(mode!=='running')return;stopTimer();setMode('done');const counts=Array(seconds).fill(0);events.forEach(t=>{const i=Math.floor((t-startAt)/1000);if(i>=0&&i<seconds)counts[i]++});const total=counts.reduce((a,b)=>a+b,0);$('total').textContent=total;$('avg').textContent=(total/seconds).toFixed(1);$('peak').textContent=Math.max(...counts);$('bars').replaceChildren();$('ticks').replaceChildren();const max=Math.max(1,...counts);counts.forEach((n,i)=>{const bar=document.createElement('div');bar.className='bar';bar.style.height=Math.max(3,n/max*95)+'px';const label=document.createElement('span');label.textContent=n;bar.append(label);$('bars').append(bar);const tick=document.createElement('span');tick.textContent=i+1;$('ticks').append(tick)});$('results').hidden=false;status.textContent='測定終了！';pad.textContent='終了（タップしても再開しません）'}
+function begin(){if(mode==='running'||mode==='countdown')return;stopTimer();events=[];active.clear();$('results').hidden=true;setMode('countdown');let left=3;status.textContent='開始まで '+left;pad.textContent='準備してね';timer=setInterval(()=>{left--;if(left>0){status.textContent='開始まで '+left;return}stopTimer();startAt=clock();setMode('running');status.textContent='残り '+seconds.toFixed(1)+' 秒';pad.textContent='連打！';timer=setInterval(()=>{const elapsed=(clock()-startAt)/1000;if(elapsed>=seconds){finish();return}status.textContent='残り '+Math.max(0,seconds-elapsed).toFixed(1)+' 秒 ｜ '+events.length+' 回'},40)},1000)}
+function count(t){if(mode!=='running')return;if(t<startAt||t>=startAt+seconds*1000){if(t>=startAt+seconds*1000)finish();return}events.push(t)}
+pad.addEventListener('touchstart',e=>{if(e.cancelable)e.preventDefault();for(const t of e.changedTouches){if(!active.has(t.identifier)){active.add(t.identifier);count(clock())}}},{passive:false});
+for(const name of ['touchend','touchcancel'])pad.addEventListener(name,e=>{if(e.cancelable)e.preventDefault();for(const t of e.changedTouches)active.delete(t.identifier)},{passive:false});
+pad.addEventListener('contextmenu',e=>e.preventDefault());pad.addEventListener('dblclick',e=>e.preventDefault());
+pad.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')count(clock())});
+$('durations').addEventListener('click',e=>{const b=e.target.closest('button[data-s]');if(!b||mode==='running'||mode==='countdown')return;seconds=Number(b.dataset.s);document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('selected',x===b))});
+start.addEventListener('click',begin);$('reset').addEventListener('click',()=>{stopTimer();events=[];active.clear();setMode('idle');status.textContent='待機中';pad.textContent='ここを連打！ 開始ボタンを押してね';$('results').hidden=true});
+})();
+</script></body></html>
